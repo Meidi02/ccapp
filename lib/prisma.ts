@@ -7,7 +7,7 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL || "";
+  const connectionString = process.env.DATABASE_URL || "postgresql://postgres.gboddjbedfiyiapfklhb:Mynameism7mmd!@aws-1-us-east-2.pooler.supabase.com:6543/postgres?pgbouncer=true";
 
   // Create pool manually with SSL enabled for Supabase
   const pool = new pg.Pool({
