@@ -23,9 +23,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Unprotected API routes for Twilio webhooks
+  // Unprotected API routes
   if (request.nextUrl.pathname.startsWith('/api/call') || 
-      request.nextUrl.pathname.startsWith('/api/sms')) {
+      request.nextUrl.pathname.startsWith('/api/sms') ||
+      request.nextUrl.pathname.startsWith('/api/auth')) {
      return NextResponse.next();
   }
 
