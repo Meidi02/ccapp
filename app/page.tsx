@@ -1688,7 +1688,7 @@ export default function Dashboard() {
                 style={{ flex: 1, fontSize: "1rem", padding: "14px 20px" }}
                 aria-keyshortcuts={getKey(callActive ? 'hang_up' : 'call_lead')}
               >
-                {calling ? (callActive ? "🔴 Hang Up" : "Connecting...") : "📞 Call Now"}
+                {calling ? (callActive ? "🔴 Hang Up" : "Connecting...") : (selectedLeadIds.length > 1 ? `📞 Parallel Dial (${selectedLeadIds.length})` : "📞 Call Now")}
               </button>
 
               <button
