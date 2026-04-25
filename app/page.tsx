@@ -672,7 +672,10 @@ export default function Dashboard() {
           try {
             const res = await fetch("/api/call/parallel", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                "Content-Type": "application/json",
+                "x-user-id": userProfile.userId
+              },
               body: JSON.stringify({ leadIds: selectedLeadIds })
             });
             const data = await res.json();

@@ -20,14 +20,17 @@ export async function POST(request: NextRequest) {
     });
     const twilioNumber = phoneSetting?.value || "";
 
-    // Determine if this is an INBOUND call (someone calling the Twilio number)
-    // Inbound: "To" matches our Twilio number, or direction is "inbound"
-    const isInbound =
-      direction === "inbound" ||
-      (to && twilioNumber && to.replace(/\s/g, "") === twilioNumber.replace(/\s/g, ""));
+    // Determine if this is a true INBOUND call from a real phone number
+    // Calls from the browser (WebRTC) also have Direction: "inbound", but their From is "client:ccapp-agent"
+    const isFromClient = from && from.startsWith("client:");
+    
+    // It's a real inbound call if it's NOT from the client AND the destination is our Twilio number
+    const isRealInbound =
+      !isFromClient &&
+      to && twilioNumber && to.replace(/\s/g, "") === twilioNumber.replace(/\s/g, "");
 
-    if (isInbound) {
-      // Route incoming call to the browser client (caller hears ringing)
+    if (isRealInbound) {
+      // Route true incoming call to the browser client (caller hears ringing)
       const dial = twiml.dial({
         callerId: from || twilioNumber,
         record: "record-from-answer-dual",
@@ -36,7 +39,7 @@ export async function POST(request: NextRequest) {
         recordingStatusCallbackEvent: ["completed"],
       });
       dial.client("ccapp-agent");
-    } else if (to && to.startsWith("ParallelDial_")) {
+    } else if (isFromClient && to && to.startsWith("ParallelDial_")) {
       // OUTBOUND call from browser specifically to initiate parallel dial conference
       const childId = to.split("_")[1];
       const dial = twiml.dial();
