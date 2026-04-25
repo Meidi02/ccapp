@@ -6,6 +6,24 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  role         String    @default("CHILD") // "MASTER" or "CHILD"
+  createdAt    DateTime  @default(now())
+  projects     Project[]
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads     Lead[]
+  createdAt DateTime @default(now())
+}
+
 model Lead {
   id          String   @id @default(cuid())
   firstName   String
@@ -22,6 +40,8 @@ model Lead {
   callbackDate String  @default("")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model Setting {

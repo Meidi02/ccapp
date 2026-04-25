@@ -92,6 +92,17 @@ export async function POST(request: NextRequest) {
       return lead;
     });
 
+    const projectId = formData.get("projectId") as string | null;
+    const userId = request.headers.get("x-user-id");
+    const role = request.headers.get("x-user-role");
+
+    if (projectId) {
+       const project = await prisma.project.findUnique({ where: { id: projectId } });
+       if (!project || (project.userId !== userId && role !== 'MASTER')) {
+         return NextResponse.json({ error: 'Unauthorized project access' }, { status: 401 });
+       }
+    }
+
     const created = await prisma.lead.createMany({
       data: leads.map((l) => ({
         firstName: l.firstName || "Unknown",
@@ -105,6 +116,7 @@ export async function POST(request: NextRequest) {
         website: l.website || "",
         notes: l.notes || "",
         disposition: l.disposition || "NEW",
+        projectId: projectId || null,
       })),
     });
 

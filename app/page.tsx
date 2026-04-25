@@ -140,8 +140,10 @@ export default function Dashboard() {
   // Fetch ALL leads (filtering is client-side for stable tab counts)
   const fetchLeads = useCallback(async () => {
     try {
+      const activeProjectId = localStorage.getItem("activeProjectId");
       const params = new URLSearchParams();
       if (search) params.set("search", search);
+      if (activeProjectId) params.set("projectId", activeProjectId);
 
       const res = await fetch(`/api/leads?${params}`);
       const data = await res.json();
@@ -159,6 +161,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchLeads();
+    const handleProjectChange = () => {
+      fetchLeads();
+    };
+    window.addEventListener('projectChanged', handleProjectChange);
+    return () => window.removeEventListener('projectChanged', handleProjectChange);
   }, [fetchLeads]);
 
   // Load custom keybindings from settings
@@ -883,6 +890,10 @@ export default function Dashboard() {
 
     const formData = new FormData();
     formData.append("file", file);
+    const activeProjectId = localStorage.getItem("activeProjectId");
+    if (activeProjectId) {
+      formData.append("projectId", activeProjectId);
+    }
 
     try {
       const res = await fetch("/api/import", {

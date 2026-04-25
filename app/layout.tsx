@@ -7,11 +7,22 @@ export const metadata: Metadata = {
     "Accessible cold calling web app with one-click Twilio calling and Gmail email integration.",
 };
 
-export default function RootLayout({
+import { cookies } from "next/headers";
+import { verifyToken } from "@/lib/auth";
+import NavMenu from "./components/NavMenu";
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  let user = null;
+  if (token) {
+    user = await verifyToken(token);
+  }
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -20,66 +31,12 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body suppressHydrationWarning>
-        {/* Skip to main content link — first focusable element for screen readers */}
-        <a href="#main-content" className="skip-link">
+      <body suppressHydrationWarning className="bg-gray-900 min-h-screen">
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:p-2 focus:bg-blue-600 focus:text-white focus:z-50">
           Skip to main content
         </a>
 
-        {/* Navigation landmark */}
-        <nav aria-label="Main navigation">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "12px 24px",
-              borderBottom: "1px solid var(--color-border)",
-              backgroundColor: "var(--color-bg-secondary)",
-            }}
-          >
-            <h1
-              style={{
-                fontSize: "1.25rem",
-                fontWeight: 800,
-                margin: 0,
-                color: "var(--color-accent)",
-              }}
-            >
-              CCAPP
-            </h1>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <a
-                href="/"
-                className="btn btn-secondary"
-                style={{ fontSize: "0.875rem", padding: "8px 16px" }}
-              >
-                Dashboard
-              </a>
-              <a
-                href="/history"
-                className="btn btn-secondary"
-                style={{ fontSize: "0.875rem", padding: "8px 16px" }}
-              >
-                Call History
-              </a>
-              <a
-                href="/texts"
-                className="btn btn-secondary"
-                style={{ fontSize: "0.875rem", padding: "8px 16px" }}
-              >
-                Texts
-              </a>
-              <a
-                href="/settings"
-                className="btn btn-secondary"
-                style={{ fontSize: "0.875rem", padding: "8px 16px" }}
-              >
-                Settings
-              </a>
-            </div>
-          </div>
-        </nav>
+        <NavMenu user={user as any} />
 
         {/* Main content landmark */}
         <main id="main-content" role="main" tabIndex={-1}>

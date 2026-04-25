@@ -7,8 +7,23 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const disposition = searchParams.get("disposition");
     const search = searchParams.get("search");
+    const projectId = searchParams.get("projectId");
+    const userId = request.headers.get("x-user-id");
+    const role = request.headers.get("x-user-role");
 
-    const where: Record<string, unknown> = {};
+    const where: any = {};
+
+    if (projectId) {
+       const project = await prisma.project.findUnique({ where: { id: projectId } });
+       if (!project || (project.userId !== userId && role !== 'MASTER')) {
+         return NextResponse.json({ error: 'Unauthorized project access' }, { status: 401 });
+       }
+       where.projectId = projectId;
+    } else {
+       if (role !== 'MASTER') {
+         where.project = { userId };
+       }
+    }
 
     if (disposition && disposition !== "ALL") {
       where.disposition = disposition;
