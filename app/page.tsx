@@ -65,6 +65,11 @@ export default function Dashboard() {
   const [calling, setCalling] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
+  // Parallel Dialer State
+  const [userProfile, setUserProfile] = useState<{userId: string, role: string} | null>(null);
+  const [maxParallelDials, setMaxParallelDials] = useState(1);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+
   // Dialer state
   const [dialerNumber, setDialerNumber] = useState("");
   const [showDialer, setShowDialer] = useState(false);
@@ -159,8 +164,34 @@ export default function Dashboard() {
   // Client-side filter by disposition
   const filteredLeads = filter === "ALL" ? leads : leads.filter((l) => l.disposition === filter);
 
+  // Handle lead selection and auto-highlight parallel leads
+  const handleSelectLead = useCallback((lead: Lead) => {
+    setSelectedLead(lead);
+    announce(`Selected ${lead.firstName} ${lead.lastName}`);
+    
+    // Auto-select N leads for parallel dialing
+    const currentIndex = filteredLeads.findIndex((l) => l.id === lead.id);
+    if (currentIndex !== -1) {
+      const nextNLeads = filteredLeads.slice(currentIndex, currentIndex + maxParallelDials);
+      setSelectedLeadIds(nextNLeads.map(l => l.id));
+    }
+  }, [filteredLeads, maxParallelDials]);
+
   useEffect(() => {
     fetchLeads();
+    
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) setUserProfile(data);
+      })
+      .catch(console.error);
+
+    fetch("/api/user/dialer")
+      .then((r) => r.json())
+      .then((data) => setMaxParallelDials(data.maxParallelDials || 1))
+      .catch(console.error);
+
     const handleProjectChange = () => {
       fetchLeads();
     };
@@ -408,8 +439,7 @@ export default function Dashboard() {
         const currentIndex = selectedLead ? filteredLeads.findIndex((l) => l.id === selectedLead.id) : -1;
         const nextIndex = Math.min(currentIndex + 1, filteredLeads.length - 1);
         const nextLead = filteredLeads[nextIndex];
-        setSelectedLead(nextLead);
-        announce(`Selected ${nextLead.firstName} ${nextLead.lastName}`);
+        handleSelectLead(nextLead);
         return;
       }
       if (matchesKeybinding(e, getKey("prev_lead")) && filteredLeads.length > 0) {
@@ -417,8 +447,7 @@ export default function Dashboard() {
         const currentIndex = selectedLead ? filteredLeads.findIndex((l) => l.id === selectedLead.id) : filteredLeads.length;
         const prevIndex = Math.max(currentIndex - 1, 0);
         const prevLead = filteredLeads[prevIndex];
-        setSelectedLead(prevLead);
-        announce(`Selected ${prevLead.firstName} ${prevLead.lastName}`);
+        handleSelectLead(prevLead);
         return;
       }
 
@@ -592,6 +621,78 @@ export default function Dashboard() {
     setActionStatus("Connecting call...");
     announce(`Calling ${selectedLead.firstName} ${selectedLead.lastName} at ${selectedLead.phone}`);
 
+    if (selectedLeadIds.length > 1) {
+      // Parallel Dialer logic
+      if (!userProfile) return;
+
+      setCalling(true);
+      setActionStatus(`Connecting Parallel Dial (${selectedLeadIds.length} leads)...`);
+      announce(`Connecting parallel dial for ${selectedLeadIds.length} leads.`);
+
+      try {
+        const tokenRes = await fetch("/api/token");
+        const tokenData = await tokenRes.json();
+
+        if (!tokenRes.ok) {
+          throw new Error(tokenData.error || "Failed to get Twilio token");
+        }
+
+        const { Device } = await import("@twilio/voice-sdk");
+
+        if (!deviceRef.current) {
+          deviceRef.current = new Device(tokenData.token, { logLevel: 1 });
+          await deviceRef.current.register();
+        } else {
+          deviceRef.current.updateToken(tokenData.token);
+        }
+
+        const device = deviceRef.current;
+        const params = { To: `ParallelDial_${userProfile.userId}` };
+        
+        // Connect to conference bridge
+        const call = await device.connect({ params });
+        activeCallRef.current = call;
+
+        call.on("accept", async () => {
+          setCallActive(true);
+          // Once in the conference, launch the outbound REST calls
+          try {
+            const res = await fetch("/api/call/parallel", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ leadIds: selectedLeadIds })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+              setActionStatus(`Parallel dialing ${data.initiatedCalls} leads. Waiting for answer...`);
+            } else {
+              throw new Error(data.error || "Failed to initiate calls");
+            }
+          } catch (e: any) {
+            setActionStatus(`Error starting parallel calls: ${e.message}`);
+            handleHangUp();
+          }
+        });
+
+        call.on("disconnect", () => handleHangUp());
+        call.on("cancel", () => handleHangUp());
+        call.on("reject", () => handleHangUp());
+        call.on("error", (err: any) => {
+          console.error("Twilio Call error:", err);
+          setActionStatus("Call error: " + err.message);
+          handleHangUp();
+        });
+
+      } catch (err: any) {
+        setCalling(false);
+        setActionStatus(err.message || "Failed to start parallel call");
+        announce(err.message || "Failed to start parallel call");
+      }
+      return;
+    }
+
+    // Standard single dial logic
     try {
       // Get access token
       const tokenRes = await fetch("/api/token");
@@ -1237,6 +1338,7 @@ export default function Dashboard() {
             <table className="lead-table" aria-label="Leads">
               <thead>
                 <tr>
+                  <th scope="col" style={{ width: "40px" }}></th>
                   <th scope="col">Name</th>
                   <th scope="col">Company</th>
                   <th scope="col">Phone</th>
@@ -1244,21 +1346,35 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLeads.map((lead) => (
+                {filteredLeads.map((lead) => {
+                  const isChecked = selectedLeadIds.includes(lead.id);
+                  return (
                   <tr
                     key={lead.id}
                     tabIndex={0}
                     role="row"
                     aria-current={selectedLead?.id === lead.id ? "true" : undefined}
-                    onClick={() => {
-                      setSelectedLead(lead);
-                      announce(
-                        `Selected ${lead.firstName} ${lead.lastName}${lead.company ? ` from ${lead.company}` : ""}`
-                      );
-                    }}
+                    onClick={() => handleSelectLead(lead)}
                     onKeyDown={(e) => handleLeadKeyDown(e, lead)}
                     aria-label={`${lead.firstName} ${lead.lastName}, ${lead.company || "no company"}, ${DISPOSITION_LABELS[lead.disposition as Disposition] || lead.disposition}`}
+                    style={{ background: isChecked ? "rgba(59, 130, 246, 0.15)" : undefined }}
                   >
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedLeadIds(prev => [...prev, lead.id]);
+                            if (selectedLeadIds.length === 0) handleSelectLead(lead);
+                          } else {
+                            setSelectedLeadIds(prev => prev.filter(id => id !== lead.id));
+                          }
+                        }}
+                        style={{ width: "16px", height: "16px", accentColor: "var(--color-blue)", cursor: "pointer" }}
+                        aria-label={`Select ${lead.firstName}`}
+                      />
+                    </td>
                     <td style={{ fontWeight: 600 }}>
                       {lead.firstName} {lead.lastName}
                     </td>
@@ -1276,7 +1392,7 @@ export default function Dashboard() {
                       </span>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           )}

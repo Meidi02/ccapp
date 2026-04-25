@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/settings — get all settings
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const role = request.headers.get('x-user-role');
   try {
     const settings = await prisma.setting.findMany();
     const settingsMap: Record<string, string> = {};
     for (const s of settings) {
+      // Hide sensitive settings from children
+      if (role !== 'MASTER' && (s.key.startsWith('TWILIO_') || s.key.includes('PASSWORD') || s.key.includes('SECRET') || s.key.includes('TOKEN'))) {
+        continue;
+      }
       settingsMap[s.key] = s.value;
     }
     return NextResponse.json(settingsMap);
@@ -24,10 +29,15 @@ export async function GET() {
 
 // POST /api/settings — save settings (upsert)
 export async function POST(request: NextRequest) {
+  const role = request.headers.get('x-user-role');
   try {
     const body = await request.json();
 
     for (const [key, value] of Object.entries(body)) {
+      if (role !== 'MASTER' && (key.startsWith('TWILIO_') || key.includes('PASSWORD') || key.includes('SECRET') || key.includes('TOKEN'))) {
+        continue; // Skip sensitive keys for non-masters
+      }
+
       await prisma.setting.upsert({
         where: { key },
         update: { value: value as string },

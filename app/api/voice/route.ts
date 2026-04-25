@@ -36,6 +36,14 @@ export async function POST(request: NextRequest) {
         recordingStatusCallbackEvent: ["completed"],
       });
       dial.client("ccapp-agent");
+    } else if (to && to.startsWith("ParallelDial_")) {
+      // OUTBOUND call from browser specifically to initiate parallel dial conference
+      const childId = to.split("_")[1];
+      const dial = twiml.dial();
+      dial.conference({
+        startConferenceOnEnter: true,
+        endConferenceOnExit: true, // End conference when agent leaves
+      }, `AgentRoom_${childId}`);
     } else if (to) {
       // OUTBOUND call from the browser — dial the target number
       const host = request.headers.get("host") || "";

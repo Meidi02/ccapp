@@ -32,6 +32,11 @@ export default function SettingsPage() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
+  
+  // User context
+  const [userRole, setUserRole] = useState("CHILD");
+  const [assignedNumbers, setAssignedNumbers] = useState<{id: string, phoneNumber: string}[]>([]);
+  const [maxParallelDials, setMaxParallelDials] = useState(1);
 
   // New template form
   const [newTemplateName, setNewTemplateName] = useState("");
@@ -53,6 +58,23 @@ export default function SettingsPage() {
 
   // Load settings and templates
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => r.json())
+      .then(data => {
+        if (data.role) setUserRole(data.role);
+      })
+      .catch(console.error);
+
+    fetch("/api/user/twilio")
+      .then(r => r.json())
+      .then(data => setAssignedNumbers(Array.isArray(data) ? data : []))
+      .catch(console.error);
+
+    fetch("/api/user/dialer")
+      .then(r => r.json())
+      .then(data => setMaxParallelDials(data.maxParallelDials || 1))
+      .catch(console.error);
+
     fetch("/api/settings")
       .then((r) => r.json())
       .then((data) => {
@@ -79,6 +101,14 @@ export default function SettingsPage() {
     announce("Saving settings");
 
     try {
+      // Save dialer config
+      await fetch("/api/user/dialer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ maxParallelDials }),
+      });
+
+      // Save global settings
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -179,7 +209,57 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Parallel Dialer Settings */}
+      <section aria-labelledby="dialer-heading" className="card" style={{ marginBottom: "24px", border: "1px solid var(--color-blue)", background: "rgba(59, 130, 246, 0.05)" }}>
+        <h3 id="dialer-heading" style={{ fontSize: "1.125rem", fontWeight: 700, marginBottom: "16px", margin: "0 0 16px", color: "var(--color-blue)" }}>
+          🚀 Parallel Dialer
+        </h3>
+        
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div>
+            <label htmlFor="parallel-dials" className="form-label">
+              Max Parallel Dials (1-10)
+            </label>
+            <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", marginBottom: "8px" }}>
+              Controls how many leads are called simultaneously when you click "Call".
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <input
+                id="parallel-dials"
+                type="range"
+                min="1"
+                max="10"
+                value={maxParallelDials}
+                onChange={(e) => setMaxParallelDials(parseInt(e.target.value) || 1)}
+                style={{ flex: 1, accentColor: "var(--color-blue)" }}
+              />
+              <span style={{ fontSize: "1.25rem", fontWeight: 700, minWidth: "40px", textAlign: "center", color: "var(--color-blue)" }}>
+                {maxParallelDials}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: "8px" }}>Your Assigned Caller IDs:</h4>
+            {assignedNumbers.length === 0 ? (
+              <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
+                No phone numbers assigned by Admin. Parallel dialing will not work until numbers are assigned.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {assignedNumbers.map((num) => (
+                  <span key={num.id} style={{ background: "rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "4px", fontSize: "0.8125rem", fontFamily: "monospace" }}>
+                    {num.phoneNumber}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* Twilio Settings */}
+      {userRole === 'MASTER' && (
       <section aria-labelledby="twilio-heading" className="card" style={{ marginBottom: "24px" }}>
         <h3 id="twilio-heading" style={{ fontSize: "1.125rem", fontWeight: 700, marginBottom: "16px", margin: "0 0 16px" }}>
           📞 Twilio Configuration
@@ -300,6 +380,7 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Gmail Settings */}
       <section aria-labelledby="gmail-heading" className="card" style={{ marginBottom: "24px" }}>

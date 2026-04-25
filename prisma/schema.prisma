@@ -13,6 +13,8 @@ model User {
   role         String    @default("CHILD") // "MASTER" or "CHILD"
   createdAt    DateTime  @default(now())
   projects     Project[]
+  twilioNumbers TwilioNumber[]
+  dialerConfig DialerConfig?
 }
 
 model Project {
@@ -72,6 +74,7 @@ model CallLog {
   recordingUrl  String    @default("")
   startedAt     DateTime  @default(now())
   endedAt       DateTime?
+  batchId       String?
 }
 
 model SmsLog {
@@ -84,4 +87,24 @@ model SmsLog {
   twilioSid String   @default("")
   direction String   @default("outbound")
   sentAt    DateTime @default(now())
+}
+
+model TwilioNumber {
+  id           String   @id @default(cuid())
+  phoneNumber  String
+  accountSid   String
+  authToken    String
+  assignedToId String?
+  assignedTo   User?    @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model DialerConfig {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  maxParallelDials Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
