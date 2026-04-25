@@ -23,6 +23,14 @@ export async function POST(request: Request) {
       data: { status: callStatus, duration },
     });
 
+    await prisma.systemLog.create({
+      data: {
+        level: 'INFO', source: 'TWILIO',
+        message: `Status Webhook: Call ${callSid} status changed to ${callStatus}`,
+        meta: { batchId, childId, callStatus, duration }
+      }
+    });
+
     // If this call was answered, we need to cancel the other ringing calls in the batch
     if (callStatus === 'answered' || callStatus === 'in-progress') {
       console.log(`[Parallel Status] Call ${callSid} was answered. Canceling other calls in batch ${batchId}.`);
@@ -52,11 +60,26 @@ export async function POST(request: Request) {
                 where: { callSid: otherCall.callSid },
                 data: { status: 'canceled' }
               });
+
+              await prisma.systemLog.create({
+                data: {
+                  level: 'INFO', source: 'BACKEND',
+                  message: `Canceled ringing call ${otherCall.callSid} because batch ${batchId} was answered.`,
+                  meta: { callSid: otherCall.callSid, batchId }
+                }
+              });
               break; // Stop trying credentials once successful
             } catch (e: any) {
               // Expected if the credential doesn't own this CallSid
               if (e.status !== 404 && e.code !== 20404) {
                 console.error(`[Parallel Status] Error canceling ${otherCall.callSid}:`, e.message);
+                await prisma.systemLog.create({
+                  data: {
+                    level: 'ERROR', source: 'TWILIO',
+                    message: `Failed to cancel call ${otherCall.callSid}: ${e.message}`,
+                    meta: { error: e.message }
+                  }
+                }).catch(() => {});
               }
             }
           }
@@ -65,8 +88,15 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Parallel status error:', error);
+    await prisma.systemLog.create({
+      data: {
+        level: 'ERROR', source: 'BACKEND',
+        message: `Status Webhook Error: ${error.message || error}`,
+        meta: { error: error.message || String(error) }
+      }
+    }).catch(() => {});
     return NextResponse.json({ success: false }); // Always return 2xx or 500
   }
 }

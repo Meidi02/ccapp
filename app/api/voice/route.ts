@@ -44,6 +44,14 @@ export async function POST(request: NextRequest) {
         startConferenceOnEnter: true,
         endConferenceOnExit: true, // End conference when agent leaves
       }, `AgentRoom_${childId}`);
+
+      await prisma.systemLog.create({
+        data: {
+          level: "INFO", source: "TWILIO",
+          message: `Voice Webhook: Generated ParallelDial conference TwiML for child ${childId}`,
+          meta: { to, from, twiml: twiml.toString() }
+        }
+      });
     } else if (to) {
       // OUTBOUND call from the browser — dial the target number
       const host = request.headers.get("host") || "";
@@ -66,8 +74,13 @@ export async function POST(request: NextRequest) {
       status: 200,
       headers: { "Content-Type": "text/xml" },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in voice webhook:", error);
+    
+    await prisma.systemLog.create({
+      data: { level: "ERROR", source: "TWILIO", message: `Voice Webhook Error: ${error?.message || String(error)}` }
+    }).catch(() => {});
+
     const twiml = new VoiceResponse();
     twiml.say("An error occurred. Please try again.");
 

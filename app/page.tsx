@@ -290,6 +290,10 @@ export default function Dashboard() {
 
         device.on("error", (err: Error) => {
           console.error("Twilio Device error:", err);
+          fetch("/api/logs", {
+            method: "POST",
+            body: JSON.stringify({ level: "ERROR", source: "TWILIO", message: "Device error: " + err.message })
+          });
         });
 
         // Register the device to receive incoming calls
@@ -649,11 +653,14 @@ export default function Dashboard() {
         const device = deviceRef.current;
         const params = { To: `ParallelDial_${userProfile.userId}` };
         
+        fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "INFO", source: "FRONTEND", message: "Initiating ParallelDial WebRTC connection" }) });
+
         // Connect to conference bridge
         const call = await device.connect({ params });
         activeCallRef.current = call;
 
         call.on("accept", async () => {
+          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "INFO", source: "FRONTEND", message: "WebRTC accepted, triggering parallel REST calls" }) });
           setCallActive(true);
           // Once in the conference, launch the outbound REST calls
           try {
@@ -670,21 +677,34 @@ export default function Dashboard() {
               throw new Error(data.error || "Failed to initiate calls");
             }
           } catch (e: any) {
+            fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "ERROR", source: "FRONTEND", message: "Failed to start parallel calls: " + e.message }) });
             setActionStatus(`Error starting parallel calls: ${e.message}`);
             handleHangUp();
           }
         });
 
-        call.on("disconnect", () => handleHangUp());
-        call.on("cancel", () => handleHangUp());
-        call.on("reject", () => handleHangUp());
+        call.on("disconnect", () => {
+          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "INFO", source: "FRONTEND", message: "Parallel call disconnected" }) });
+          handleHangUp();
+        });
+        call.on("cancel", () => {
+          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "WARN", source: "FRONTEND", message: "Parallel call canceled" }) });
+          handleHangUp();
+        });
+        call.on("reject", () => {
+          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "ERROR", source: "FRONTEND", message: "Parallel call rejected" }) });
+          setActionStatus("Call rejected by server");
+          handleHangUp();
+        });
         call.on("error", (err: any) => {
           console.error("Twilio Call error:", err);
+          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "ERROR", source: "TWILIO", message: "Call error: " + err.message }) });
           setActionStatus("Call error: " + err.message);
           handleHangUp();
         });
 
       } catch (err: any) {
+        fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "ERROR", source: "FRONTEND", message: "Exception starting parallel dial: " + err.message }) });
         setCalling(false);
         setActionStatus(err.message || "Failed to start parallel call");
         announce(err.message || "Failed to start parallel call");
@@ -1354,10 +1374,11 @@ export default function Dashboard() {
                     tabIndex={0}
                     role="row"
                     aria-current={selectedLead?.id === lead.id ? "true" : undefined}
+                    aria-selected={isChecked}
                     onClick={() => handleSelectLead(lead)}
                     onKeyDown={(e) => handleLeadKeyDown(e, lead)}
                     aria-label={`${lead.firstName} ${lead.lastName}, ${lead.company || "no company"}, ${DISPOSITION_LABELS[lead.disposition as Disposition] || lead.disposition}`}
-                    style={{ background: isChecked ? "rgba(59, 130, 246, 0.15)" : undefined }}
+                    style={isChecked ? { backgroundColor: "var(--color-bg-selected)", borderLeft: "4px solid var(--color-accent)" } : {}}
                   >
                     <td onClick={(e) => e.stopPropagation()}>
                       <input 
@@ -1365,8 +1386,11 @@ export default function Dashboard() {
                         checked={isChecked}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedLeadIds(prev => [...prev, lead.id]);
-                            if (selectedLeadIds.length === 0) handleSelectLead(lead);
+                            if (selectedLeadIds.length === 0) {
+                              handleSelectLead(lead);
+                            } else {
+                              setSelectedLeadIds(prev => [...prev, lead.id]);
+                            }
                           } else {
                             setSelectedLeadIds(prev => prev.filter(id => id !== lead.id));
                           }

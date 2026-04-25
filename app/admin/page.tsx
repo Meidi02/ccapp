@@ -28,10 +28,20 @@ type TwilioProfile = {
   authToken: string;
 };
 
+type SystemLog = {
+  id: string;
+  level: string;
+  source: string;
+  message: string;
+  meta: any;
+  createdAt: string;
+};
+
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [twilioNumbers, setTwilioNumbers] = useState<TwilioNumber[]>([]);
   const [twilioProfiles, setTwilioProfiles] = useState<TwilioProfile[]>([]);
+  const [logs, setLogs] = useState<SystemLog[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [newUsername, setNewUsername] = useState("");
@@ -52,7 +62,11 @@ export default function AdminPage() {
   const router = useRouter();
 
   useEffect(() => {
-    Promise.all([fetchUsers(), fetchTwilioNumbers(), fetchTwilioProfiles()]).finally(() => setLoading(false));
+    Promise.all([fetchUsers(), fetchTwilioNumbers(), fetchTwilioProfiles(), fetchLogs()]).finally(() => setLoading(false));
+    
+    // Poll logs every 5 seconds
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchUsers = async () => {
@@ -87,6 +101,18 @@ export default function AdminPage() {
       if (res.ok) {
         const data = await res.json();
         setTwilioProfiles(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch("/api/admin/logs");
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data);
       }
     } catch (err) {
       console.error(err);
@@ -496,6 +522,58 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      <div className="mt-8 bg-gray-800 rounded-lg shadow-md border border-gray-700 overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+          <h2 className="text-xl font-semibold text-green-400">System Logs (Live)</h2>
+          <button onClick={fetchLogs} className="text-sm text-gray-400 hover:text-white transition">
+            ↻ Refresh
+          </button>
+        </div>
+        <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+          <table className="w-full text-left font-mono text-xs">
+            <thead className="bg-gray-900 text-gray-400 sticky top-0">
+              <tr>
+                <th className="px-4 py-2 w-48">Timestamp</th>
+                <th className="px-4 py-2 w-24">Level</th>
+                <th className="px-4 py-2 w-24">Source</th>
+                <th className="px-4 py-2">Message</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {logs.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-4 text-center text-gray-500 font-sans">No system logs available</td>
+                </tr>
+              )}
+              {logs.map((log) => (
+                <tr key={log.id} className="hover:bg-gray-700/50">
+                  <td className="px-4 py-2 text-gray-500">{new Date(log.createdAt).toLocaleString()}</td>
+                  <td className="px-4 py-2">
+                    <span className={`px-2 py-0.5 rounded font-bold ${
+                      log.level === 'ERROR' ? 'text-red-400 bg-red-400/10' :
+                      log.level === 'WARN' ? 'text-yellow-400 bg-yellow-400/10' :
+                      'text-blue-400 bg-blue-400/10'
+                    }`}>
+                      {log.level}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-400">{log.source}</td>
+                  <td className="px-4 py-2 text-gray-300">
+                    <div>{log.message}</div>
+                    {log.meta && (
+                      <div className="mt-1 text-[10px] text-gray-500 overflow-x-hidden text-ellipsis whitespace-nowrap max-w-2xl">
+                        {JSON.stringify(log.meta)}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   );
 }

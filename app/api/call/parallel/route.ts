@@ -37,6 +37,14 @@ export async function POST(request: Request) {
     const callResults = [];
 
     // Initiate calls
+    await prisma.systemLog.create({
+      data: {
+        level: 'INFO', source: 'BACKEND',
+        message: `Initiating parallel dial batch ${batchId} for ${leads.length} leads by user ${userId}`,
+        meta: { leadIds, masterSip }
+      }
+    });
+
     for (let i = 0; i < leads.length; i++) {
       const lead = leads[i];
       // Round-robin or random number assignment
@@ -68,12 +76,26 @@ export async function POST(request: Request) {
         callResults.push({ leadId: lead.id, callSid: call.sid, logId: log.id });
       } catch (callError: any) {
         console.error(`Failed to initiate call to ${lead.phone}:`, callError);
+        await prisma.systemLog.create({
+          data: {
+            level: 'ERROR', source: 'TWILIO',
+            message: `Failed to initiate call to ${lead.phone}: ${callError.message || callError}`,
+            meta: { leadId: lead.id, error: callError }
+          }
+        });
       }
     }
 
     return NextResponse.json({ success: true, batchId, initiatedCalls: callResults.length });
   } catch (error: any) {
     console.error('Parallel dialer error:', error);
+    await prisma.systemLog.create({
+      data: {
+        level: 'ERROR', source: 'BACKEND',
+        message: `Parallel dialer outer error: ${error.message || error}`,
+        meta: { error }
+      }
+    }).catch(() => {});
     return NextResponse.json({ error: error.message || 'Failed to start parallel dialing' }, { status: 500 });
   }
 }
