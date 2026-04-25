@@ -18,10 +18,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No valid leads found' }, { status: 400 });
     }
 
+    // Get dialer config
+    const config = await prisma.dialerConfig.findUnique({ where: { userId } });
+    const selectedCallerIds = config?.selectedCallerIds || [];
+
     // Get assigned numbers for this child
-    const assignedNumbers = await prisma.twilioNumber.findMany({ where: { assignedToId: userId } });
+    let assignedNumbers = await prisma.twilioNumber.findMany({ where: { assignedToId: userId } });
+    
+    // Filter by selected caller IDs if the user has actively selected any
+    if (selectedCallerIds.length > 0) {
+      assignedNumbers = assignedNumbers.filter(num => selectedCallerIds.includes(num.id));
+    }
+
     if (assignedNumbers.length === 0) {
-      return NextResponse.json({ error: 'No Twilio numbers assigned to this user' }, { status: 400 });
+      return NextResponse.json({ error: 'No valid Twilio numbers selected/assigned for this user' }, { status: 400 });
     }
 
     // Get Master SID for SIP Bridge

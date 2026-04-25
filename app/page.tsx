@@ -42,6 +42,15 @@ function mergeTemplate(template: string, lead: Lead): string {
     .replace(/\{\{website\}\}/gi, lead.website);
 }
 
+// Helper: send logs to system
+function logToSystem(level: string, source: string, message: string, meta?: any) {
+  fetch("/api/logs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ level, source, message, meta }),
+  }).catch(console.error);
+}
+
 type EmailTemplate = {
   id: string;
   name: string;
@@ -290,10 +299,7 @@ export default function Dashboard() {
 
         device.on("error", (err: Error) => {
           console.error("Twilio Device error:", err);
-          fetch("/api/logs", {
-            method: "POST",
-            body: JSON.stringify({ level: "ERROR", source: "TWILIO", message: "Device error: " + err.message })
-          });
+          logToSystem("ERROR", "TWILIO", "Device error: " + err.message);
         });
 
         // Register the device to receive incoming calls
@@ -503,7 +509,7 @@ export default function Dashboard() {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLead, callActive, editingNotes, filteredLeads, customBindings, getKey]);
+  }, [selectedLead, callActive, editingNotes, filteredLeads, customBindings, getKey, selectedLeadIds, userProfile]);
 
   // Handle disposition update
   const updateDisposition = async (leadId: string, disposition: Disposition) => {
@@ -653,14 +659,14 @@ export default function Dashboard() {
         const device = deviceRef.current;
         const params = { To: `ParallelDial_${userProfile.userId}` };
         
-        fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "INFO", source: "FRONTEND", message: "Initiating ParallelDial WebRTC connection" }) });
+        logToSystem("INFO", "FRONTEND", "Initiating ParallelDial WebRTC connection");
 
         // Connect to conference bridge
         const call = await device.connect({ params });
         activeCallRef.current = call;
 
         call.on("accept", async () => {
-          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "INFO", source: "FRONTEND", message: "WebRTC accepted, triggering parallel REST calls" }) });
+          logToSystem("INFO", "FRONTEND", "WebRTC accepted, triggering parallel REST calls", { leads: selectedLeadIds });
           setCallActive(true);
           // Once in the conference, launch the outbound REST calls
           try {
@@ -684,27 +690,27 @@ export default function Dashboard() {
         });
 
         call.on("disconnect", () => {
-          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "INFO", source: "FRONTEND", message: "Parallel call disconnected" }) });
+          logToSystem("INFO", "FRONTEND", "Parallel call disconnected");
           handleHangUp();
         });
         call.on("cancel", () => {
-          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "WARN", source: "FRONTEND", message: "Parallel call canceled" }) });
+          logToSystem("WARN", "FRONTEND", "Parallel call canceled");
           handleHangUp();
         });
         call.on("reject", () => {
-          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "ERROR", source: "FRONTEND", message: "Parallel call rejected" }) });
+          logToSystem("ERROR", "FRONTEND", "Parallel call rejected");
           setActionStatus("Call rejected by server");
           handleHangUp();
         });
         call.on("error", (err: any) => {
           console.error("Twilio Call error:", err);
-          fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "ERROR", source: "TWILIO", message: "Call error: " + err.message }) });
+          logToSystem("ERROR", "TWILIO", "Call error: " + err.message);
           setActionStatus("Call error: " + err.message);
           handleHangUp();
         });
 
       } catch (err: any) {
-        fetch("/api/logs", { method: "POST", body: JSON.stringify({ level: "ERROR", source: "FRONTEND", message: "Exception starting parallel dial: " + err.message }) });
+        logToSystem("ERROR", "FRONTEND", "Exception starting parallel dial: " + err.message);
         setCalling(false);
         setActionStatus(err.message || "Failed to start parallel call");
         announce(err.message || "Failed to start parallel call");

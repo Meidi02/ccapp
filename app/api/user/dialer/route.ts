@@ -24,15 +24,23 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { maxParallelDials } = await request.json();
+    const { maxParallelDials, selectedCallerIds } = await request.json();
     
     // Validate value between 1 and 10
     const value = Math.max(1, Math.min(10, Number(maxParallelDials) || 1));
+    const callerIds = Array.isArray(selectedCallerIds) ? selectedCallerIds : undefined;
 
     const config = await prisma.dialerConfig.upsert({
       where: { userId },
-      update: { maxParallelDials: value },
-      create: { userId, maxParallelDials: value },
+      update: { 
+        maxParallelDials: value,
+        ...(callerIds !== undefined ? { selectedCallerIds: callerIds } : {})
+      },
+      create: { 
+        userId, 
+        maxParallelDials: value,
+        selectedCallerIds: callerIds || []
+      },
     });
     return NextResponse.json(config);
   } catch (error) {

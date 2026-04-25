@@ -37,6 +37,8 @@ export default function SettingsPage() {
   const [userRole, setUserRole] = useState("CHILD");
   const [assignedNumbers, setAssignedNumbers] = useState<{id: string, phoneNumber: string}[]>([]);
   const [maxParallelDials, setMaxParallelDials] = useState(1);
+  const [selectedCallerIds, setSelectedCallerIds] = useState<string[]>([]);
+  const [dialerConfigLoaded, setDialerConfigLoaded] = useState(false);
 
   // New template form
   const [newTemplateName, setNewTemplateName] = useState("");
@@ -72,7 +74,11 @@ export default function SettingsPage() {
 
     fetch("/api/user/dialer")
       .then(r => r.json())
-      .then(data => setMaxParallelDials(data.maxParallelDials || 1))
+      .then(data => {
+        setMaxParallelDials(data.maxParallelDials || 1);
+        setSelectedCallerIds(Array.isArray(data.selectedCallerIds) ? data.selectedCallerIds : []);
+        setDialerConfigLoaded(true);
+      })
       .catch(console.error);
 
     fetch("/api/settings")
@@ -95,19 +101,29 @@ export default function SettingsPage() {
       .catch(console.error);
   }, []);
 
+  // Auto-save dialer config
+  useEffect(() => {
+    if (!dialerConfigLoaded) return;
+    
+    const timeout = setTimeout(() => {
+      fetch("/api/user/dialer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ maxParallelDials, selectedCallerIds }),
+      }).then((res) => {
+        if (res.ok) setStatus("Dialer settings saved");
+      }).catch(() => {});
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [maxParallelDials, selectedCallerIds, dialerConfigLoaded]);
+
   const handleSaveSettings = async () => {
     setSaving(true);
     setStatus("");
     announce("Saving settings");
 
     try {
-      // Save dialer config
-      await fetch("/api/user/dialer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ maxParallelDials }),
-      });
-
       // Save global settings
       const res = await fetch("/api/settings", {
         method: "POST",
@@ -246,12 +262,42 @@ export default function SettingsPage() {
                 No phone numbers assigned by Admin. Parallel dialing will not work until numbers are assigned.
               </p>
             ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                {assignedNumbers.map((num) => (
-                  <span key={num.id} style={{ background: "rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "4px", fontSize: "0.8125rem", fontFamily: "monospace" }}>
-                    {num.phoneNumber}
-                  </span>
-                ))}
+              <div>
+                <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: "8px" }}>Click to select/deselect the numbers you want to dial from. Changes save automatically.</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {assignedNumbers.map((num) => {
+                    const isSelected = selectedCallerIds.length === 0 || selectedCallerIds.includes(num.id);
+                    return (
+                      <button 
+                        key={num.id} 
+                        onClick={() => {
+                          setSelectedCallerIds(prev => {
+                            // If it was implicitly selecting all, explicitize it before toggling
+                            const current = prev.length === 0 ? assignedNumbers.map(n => n.id) : prev;
+                            if (current.includes(num.id)) {
+                              return current.filter(id => id !== num.id);
+                            } else {
+                              return [...current, num.id];
+                            }
+                          });
+                        }}
+                        style={{ 
+                          background: isSelected ? "var(--color-accent)" : "rgba(255,255,255,0.05)", 
+                          color: isSelected ? "#fff" : "var(--color-text-muted)",
+                          border: `1px solid ${isSelected ? "var(--color-accent)" : "rgba(255,255,255,0.1)"}`,
+                          padding: "6px 12px", 
+                          borderRadius: "6px", 
+                          fontSize: "0.8125rem", 
+                          fontFamily: "monospace",
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        {num.phoneNumber}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
