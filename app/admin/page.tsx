@@ -14,14 +14,24 @@ type User = {
 type TwilioNumber = {
   id: string;
   phoneNumber: string;
+  nickname?: string | null;
   accountSid: string;
+  assignedToId?: string | null;
   assignedTo?: { username: string } | null;
   createdAt: string;
+};
+
+type TwilioProfile = {
+  id: string;
+  name: string;
+  accountSid: string;
+  authToken: string;
 };
 
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [twilioNumbers, setTwilioNumbers] = useState<TwilioNumber[]>([]);
+  const [twilioProfiles, setTwilioProfiles] = useState<TwilioProfile[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [newUsername, setNewUsername] = useState("");
@@ -29,15 +39,20 @@ export default function AdminPage() {
   const [error, setError] = useState("");
 
   const [newPhone, setNewPhone] = useState("");
+  const [newNickname, setNewNickname] = useState("");
   const [newSid, setNewSid] = useState("");
   const [newToken, setNewToken] = useState("");
   const [assignUserId, setAssignUserId] = useState("");
   const [twilioError, setTwilioError] = useState("");
 
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [saveProfile, setSaveProfile] = useState(false);
+  const [profileName, setProfileName] = useState("");
+
   const router = useRouter();
 
   useEffect(() => {
-    Promise.all([fetchUsers(), fetchTwilioNumbers()]).finally(() => setLoading(false));
+    Promise.all([fetchUsers(), fetchTwilioNumbers(), fetchTwilioProfiles()]).finally(() => setLoading(false));
   }, []);
 
   const fetchUsers = async () => {
@@ -63,6 +78,32 @@ export default function AdminPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchTwilioProfiles = async () => {
+    try {
+      const res = await fetch("/api/admin/twilio-profiles");
+      if (res.ok) {
+        const data = await res.json();
+        setTwilioProfiles(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleProfileSelect = (profileId: string) => {
+    setSelectedProfileId(profileId);
+    if (profileId) {
+      const profile = twilioProfiles.find(p => p.id === profileId);
+      if (profile) {
+        setNewSid(profile.accountSid);
+        setNewToken(profile.authToken);
+      }
+    } else {
+      setNewSid("");
+      setNewToken("");
     }
   };
 
@@ -107,11 +148,22 @@ export default function AdminPage() {
     e.preventDefault();
     setTwilioError("");
     try {
+      if (saveProfile && profileName) {
+        // Save profile first
+        await fetch("/api/admin/twilio-profiles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: profileName, accountSid: newSid, authToken: newToken }),
+        });
+        fetchTwilioProfiles();
+      }
+
       const res = await fetch("/api/admin/twilio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           phoneNumber: newPhone, 
+          nickname: newNickname,
           accountSid: newSid, 
           authToken: newToken,
           assignedToId: assignUserId || null
@@ -119,9 +171,14 @@ export default function AdminPage() {
       });
       if (res.ok) {
         setNewPhone("");
-        setNewSid("");
-        setNewToken("");
+        setNewNickname("");
+        if (!selectedProfileId) {
+          setNewSid("");
+          setNewToken("");
+        }
         setAssignUserId("");
+        setSaveProfile(false);
+        setProfileName("");
         fetchTwilioNumbers();
       } else {
         const data = await res.json();
@@ -143,6 +200,20 @@ export default function AdminPage() {
       }
     } catch (err) {
       alert("Failed to delete Twilio number");
+    }
+  };
+
+  const handleUpdateAssignment = async (id: string, newAssignedToId: string) => {
+    try {
+      const res = await fetch(`/api/admin/twilio/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedToId: newAssignedToId || null })
+      });
+      if (res.ok) fetchTwilioNumbers();
+      else alert("Failed to reassign Twilio number");
+    } catch (err) {
+      alert("Failed to reassign Twilio number");
     }
   };
 
@@ -238,16 +309,43 @@ export default function AdminPage() {
             <h2 className="text-xl font-semibold mb-4 text-orange-400">Add Twilio Number</h2>
             {twilioError && <p className="text-red-500 mb-4 text-sm">{twilioError}</p>}
             <form onSubmit={handleAddTwilioNumber} className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Phone Number</label>
-                <input
-                  type="text"
-                  placeholder="+1234567890"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
-                  required
-                />
+              {twilioProfiles.length > 0 && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Use Saved Profile (Optional)</label>
+                  <select
+                    value={selectedProfileId}
+                    onChange={(e) => handleProfileSelect(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                  >
+                    <option value="">-- Enter credentials manually --</option>
+                    {twilioProfiles.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Phone Number</label>
+                  <input
+                    type="text"
+                    placeholder="+1234567890"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Nickname (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sales Line 1"
+                    value={newNickname}
+                    onChange={(e) => setNewNickname(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Account SID</label>
@@ -269,16 +367,43 @@ export default function AdminPage() {
                   required
                 />
               </div>
+
+              {!selectedProfileId && (
+                <div className="bg-gray-700/30 p-3 rounded border border-gray-700">
+                  <label className="flex items-center space-x-2 text-sm text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={saveProfile}
+                      onChange={(e) => setSaveProfile(e.target.checked)}
+                      className="rounded bg-gray-900 border-gray-600"
+                    />
+                    <span>Save account credentials as a Profile</span>
+                  </label>
+                  {saveProfile && (
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        placeholder="Profile Name (e.g. Client X Burners)"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white"
+                        required={saveProfile}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Assign to Child</label>
+                <label className="block text-sm text-gray-400 mb-1">Assign to User</label>
                 <select
                   value={assignUserId}
                   onChange={(e) => setAssignUserId(e.target.value)}
                   className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
                 >
                   <option value="">-- Unassigned --</option>
-                  {users.filter(u => u.role === 'CHILD').map(u => (
-                    <option key={u.id} value={u.id}>{u.username}</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.username} ({u.role})</option>
                   ))}
                 </select>
               </div>
@@ -338,16 +463,22 @@ export default function AdminPage() {
                   )}
                   {twilioNumbers.map((num) => (
                     <tr key={num.id} className="hover:bg-gray-700/50">
-                      <td className="px-6 py-4 font-medium">{num.phoneNumber}</td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium">{num.phoneNumber}</div>
+                        {num.nickname && <div className="text-xs text-gray-400 mt-1">{num.nickname}</div>}
+                      </td>
                       <td className="px-6 py-4 font-mono text-xs text-gray-400">{num.accountSid}</td>
                       <td className="px-6 py-4">
-                        {num.assignedTo ? (
-                          <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs font-semibold">
-                            {num.assignedTo.username}
-                          </span>
-                        ) : (
-                          <span className="text-gray-500 italic">Unassigned</span>
-                        )}
+                        <select
+                          value={num.assignedToId || ""}
+                          onChange={(e) => handleUpdateAssignment(num.id, e.target.value)}
+                          className="bg-gray-900 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="">Unassigned</option>
+                          {users.map(u => (
+                            <option key={u.id} value={u.id}>{u.username}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button

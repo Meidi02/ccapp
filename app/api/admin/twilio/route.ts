@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { phoneNumber, accountSid, authToken, assignedToId } = await request.json();
+    const { phoneNumber, accountSid, authToken, assignedToId, nickname } = await request.json();
 
     if (!phoneNumber || !accountSid || !authToken) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
     const newNumber = await prisma.twilioNumber.create({
       data: {
         phoneNumber,
+        nickname: nickname || null,
         accountSid,
         authToken,
         assignedToId: assignedToId || null,
