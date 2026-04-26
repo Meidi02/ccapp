@@ -99,11 +99,10 @@ export async function POST(request: NextRequest) {
         lead.phone = cleanedPhone;
       }
 
-      // Handle Google URL explicitly (append to notes)
+      // Handle Google URL explicitly
       const googleUrl = row["google url"] || row["google maps"] || row["google_url"] || "";
       if (googleUrl) {
-        const gUrlText = `Google URL: ${googleUrl.trim()}`;
-        lead.notes = lead.notes ? `${lead.notes}\n${gUrlText}` : gUrlText;
+        lead.googleUrl = googleUrl.trim();
       }
 
       // Auto-generate casualName if not provided
@@ -139,6 +138,7 @@ export async function POST(request: NextRequest) {
         city: l.city || "",
         state: l.state || "",
         website: l.website || "",
+        googleUrl: l.googleUrl || "",
         notes: l.notes || "",
         disposition: l.disposition || "NEW",
         projectId: projectId || null,

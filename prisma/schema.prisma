@@ -37,6 +37,7 @@ model Lead {
   city        String   @default("")
   state       String   @default("")
   website     String   @default("")
+  googleUrl   String   @default("")
   notes       String   @default("")
   disposition String   @default("NEW")
   callbackDate String  @default("")

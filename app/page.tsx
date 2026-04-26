@@ -1793,6 +1793,21 @@ export default function Dashboard() {
                     </dd>
                   </>
                 )}
+                {(selectedLead as any).googleUrl && (
+                  <>
+                    <dt style={{ fontWeight: 600, color: "var(--color-text-muted)" }}>Google Maps</dt>
+                    <dd style={{ margin: 0 }}>
+                      <a
+                        href={(selectedLead as any).googleUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "var(--color-accent)" }}
+                      >
+                        Open in Google Maps
+                      </a>
+                    </dd>
+                  </>
+                )}
                 {selectedLead.notes && (
                   <>
                     <dt style={{ fontWeight: 600, color: "var(--color-text-muted)" }}>Notes</dt>
