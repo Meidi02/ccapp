@@ -428,32 +428,46 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Global ClickSend Settings */}
+      {/* Global Email-to-SMS Settings */}
       <div className="bg-gray-800 rounded-lg shadow-md border border-gray-700 overflow-hidden mt-8">
-        <h2 className="text-xl font-semibold p-6 border-b border-gray-700 text-green-400">Global ClickSend SMS Configuration</h2>
+        <h2 className="text-xl font-semibold p-6 border-b border-gray-700 text-green-400">Global Email-to-SMS Configuration (Gmail)</h2>
         <div className="p-6">
-          <p className="text-sm text-gray-400 mb-6">These credentials are used for sending SMS messages without A2P 10DLC restrictions via ClickSend shared numbers.</p>
+          <p className="text-sm text-gray-400 mb-6">These credentials are used for the Email-to-SMS fallback when bypassing A2P 10DLC restrictions. You must use a <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Google App Password</a> (requires 2FA).</p>
           <form onSubmit={handleSaveSettings} className="space-y-4 max-w-3xl">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">ClickSend Username</label>
+                <label className="block text-sm text-gray-400 mb-1">Sender Name (Optional)</label>
                 <input
                   type="text"
-                  value={settings['CLICKSEND_USERNAME'] || ""}
-                  onChange={(e) => setSettings({...settings, 'CLICKSEND_USERNAME': e.target.value})}
+                  value={settings['GMAIL_SENDER_NAME'] || ""}
+                  onChange={(e) => setSettings({...settings, 'GMAIL_SENDER_NAME': e.target.value})}
                   className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
-                  placeholder="e.g. your_username"
+                  placeholder="Your Name"
                 />
               </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">ClickSend API Key</label>
-                <input
-                  type="password"
-                  value={settings['CLICKSEND_API_KEY'] || ""}
-                  onChange={(e) => setSettings({...settings, 'CLICKSEND_API_KEY': e.target.value})}
-                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
-                  placeholder="02B2FFAA-..."
-                />
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Gmail Address *</label>
+                  <input
+                    type="email"
+                    value={settings['GMAIL_SENDER_EMAIL'] || ""}
+                    onChange={(e) => setSettings({...settings, 'GMAIL_SENDER_EMAIL': e.target.value})}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                    placeholder="you@gmail.com"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">App Password *</label>
+                  <input
+                    type="password"
+                    value={settings['GMAIL_APP_PASSWORD'] || ""}
+                    onChange={(e) => setSettings({...settings, 'GMAIL_APP_PASSWORD': e.target.value})}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                    placeholder="16-character app password"
+                    required
+                  />
+                </div>
               </div>
             </div>
             <button
