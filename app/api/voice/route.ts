@@ -44,12 +44,18 @@ export async function POST(request: NextRequest) {
         sourceClientId = `ccapp-agent-${userId}`;
         
         // Try DialerConfig first
+        let foundCallerId = false;
         const dialerConfig = await prisma.dialerConfig.findUnique({ where: { userId } });
         if (dialerConfig && dialerConfig.selectedCallerIds && dialerConfig.selectedCallerIds.length > 0) {
           const selectedNum = await prisma.twilioNumber.findUnique({ where: { id: dialerConfig.selectedCallerIds[0] } });
-          if (selectedNum) callerIdToUse = selectedNum.phoneNumber;
-        } else {
-          // Fallback to assigned number
+          if (selectedNum) {
+            callerIdToUse = selectedNum.phoneNumber;
+            foundCallerId = true;
+          }
+        }
+        
+        if (!foundCallerId) {
+          // Fallback to assigned number if no valid selected number
           const assignedNum = await prisma.twilioNumber.findFirst({ where: { assignedToId: userId } });
           if (assignedNum) callerIdToUse = assignedNum.phoneNumber;
         }
