@@ -63,8 +63,9 @@ export async function POST(request: Request) {
       const client = twilio(numberConfig.accountSid, numberConfig.authToken);
 
       try {
+        const useConference = numberConfig.accountSid === masterSidSetting.value;
         const call = await client.calls.create({
-          url: `${baseUrl}/api/call/outbound-answered?childId=${userId}&leadId=${lead.id}&masterSip=${masterSip}`,
+          url: `${baseUrl}/api/call/outbound-answered?childId=${userId}&leadId=${lead.id}&masterSip=${masterSip}&useConference=${useConference}`,
           to: lead.phone,
           from: numberConfig.phoneNumber,
           statusCallback: `${baseUrl}/api/call/parallel-status?batchId=${batchId}&childId=${userId}`,

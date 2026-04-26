@@ -14,10 +14,19 @@ export async function POST(request: Request) {
     if (!masterSip) {
       response.say('System error. Missing SIP domain.');
     } else {
-      console.log(`[Outbound Answered] Lead ${leadId} answered. Forwarding to SIP: ${masterSip}`);
-      const dial = response.dial();
-      // Forward via SIP to Master Account, attaching headers
-      dial.sip(`sip:AgentRoom_${childId}@${masterSip}?X-Child-Id=${childId}&X-Lead-Id=${leadId}`);
+      const useConference = url.searchParams.get('useConference') === 'true';
+      if (useConference) {
+        console.log(`[Outbound Answered] Lead ${leadId} answered. Joining Conference directly (Same Account).`);
+        const dial = response.dial();
+        dial.conference({
+          endConferenceOnExit: false,
+        }, `AgentRoom_${childId}`);
+      } else {
+        console.log(`[Outbound Answered] Lead ${leadId} answered. Forwarding to SIP: ${masterSip}`);
+        const dial = response.dial();
+        // Forward via SIP to Master Account, attaching headers
+        dial.sip(`sip:AgentRoom_${childId}@${masterSip}?X-Child-Id=${childId}&X-Lead-Id=${leadId}`);
+      }
     }
 
     return new NextResponse(response.toString(), {
