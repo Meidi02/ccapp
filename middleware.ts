@@ -26,6 +26,8 @@ export async function middleware(request: NextRequest) {
   // Unprotected API routes
   if (request.nextUrl.pathname.startsWith('/api/call') || 
       request.nextUrl.pathname.startsWith('/api/sms') ||
+      request.nextUrl.pathname.startsWith('/api/voice') ||
+      request.nextUrl.pathname.startsWith('/api/recording-status') ||
       request.nextUrl.pathname === '/api/auth/login' ||
       request.nextUrl.pathname === '/api/auth/logout') {
      return NextResponse.next();
