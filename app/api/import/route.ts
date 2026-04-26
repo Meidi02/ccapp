@@ -40,13 +40,17 @@ export async function POST(request: NextRequest) {
       "phone number": "phone",
       phone_number: "phone",
       telephone: "phone",
+      "business phone number": "phone",
+      "business phone": "phone",
       company: "company",
       "company name": "company",
       business: "company",
+      "business name": "company",
       casual_name: "casualName",
       casualname: "casualName",
       "casual name": "casualName",
       city: "city",
+      location: "city",
       state: "state",
       province: "state",
       website: "website",
@@ -79,6 +83,27 @@ export async function POST(request: NextRequest) {
         } else {
           lead.firstName = "Unknown";
         }
+      }
+
+      // Format Phone to E.164 (Twilio Format)
+      if (lead.phone) {
+        // Fix issues where spreadsheet exports big numbers as floats (e.g. 12143469105.0)
+        let cleanedPhone = lead.phone.split('.')[0].replace(/\D/g, "");
+        if (cleanedPhone.length === 10) {
+          cleanedPhone = "+1" + cleanedPhone;
+        } else if (cleanedPhone.length === 11 && cleanedPhone.startsWith("1")) {
+          cleanedPhone = "+" + cleanedPhone;
+        } else if (cleanedPhone.length > 0 && !cleanedPhone.startsWith("+")) {
+          cleanedPhone = "+" + cleanedPhone;
+        }
+        lead.phone = cleanedPhone;
+      }
+
+      // Handle Google URL explicitly (append to notes)
+      const googleUrl = row["google url"] || row["google maps"] || row["google_url"] || "";
+      if (googleUrl) {
+        const gUrlText = `Google URL: ${googleUrl.trim()}`;
+        lead.notes = lead.notes ? `${lead.notes}\n${gUrlText}` : gUrlText;
       }
 
       // Auto-generate casualName if not provided
