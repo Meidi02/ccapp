@@ -115,6 +115,7 @@ export default function Dashboard() {
   const activeCallRef = useRef<any>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [callActive, setCallActive] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const callLogIdRef = useRef<string>("");
   const callStartTimeRef = useRef<Date | null>(null);
 
@@ -580,6 +581,14 @@ export default function Dashboard() {
     }
   };
 
+  const handleToggleMute = () => {
+    if (activeCallRef.current) {
+      const currentMute = activeCallRef.current.isMuted();
+      activeCallRef.current.mute(!currentMute);
+      setIsMuted(!currentMute);
+    }
+  };
+
   const handleHangUp = () => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     if (activeCallRef.current) {
@@ -588,6 +597,7 @@ export default function Dashboard() {
     activeCallRef.current = null;
     setCallActive(false);
     setCalling(false);
+    setIsMuted(false);
 
     // Update call log with end time
     if (callLogIdRef.current && callStartTimeRef.current) {
@@ -742,7 +752,7 @@ export default function Dashboard() {
                 } catch (err) {
                   // ignore poll errors
                 }
-              }, 1500);
+              }, 400);
 
             } else {
               throw new Error(data.error || "Failed to initiate calls");
@@ -1811,6 +1821,16 @@ export default function Dashboard() {
               >
                 {calling ? (callActive ? "🔴 Hang Up" : "Connecting...") : (selectedLeadIds.length > 1 ? `📞 Parallel Dial (${selectedLeadIds.length})` : "📞 Call Now")}
               </button>
+
+              {callActive && (
+                <button
+                  className={`btn ${isMuted ? 'btn-danger' : 'btn-secondary'}`}
+                  onClick={handleToggleMute}
+                  style={{ flex: 1, fontSize: "1rem", padding: "14px 20px" }}
+                >
+                  {isMuted ? "🔇 Unmute" : "🎙️ Mute"}
+                </button>
+              )}
 
               <button
                 ref={emailTriggerRef}
