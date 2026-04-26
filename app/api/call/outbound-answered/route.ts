@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import twilio from 'twilio';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +21,6 @@ export async function POST(request: Request) {
 
     // If it's a machine, hang up this leg. Do NOT cancel the other calls in the batch.
     if (answeredBy === 'machine_start' || answeredBy === 'machine_end_beep' || answeredBy === 'machine_end_silence' || answeredBy === 'machine_end_other') {
-      const { prisma } = require('@/lib/prisma');
       await prisma.callLog.updateMany({
         where: { callSid },
         data: { status: 'voicemail' }
@@ -32,7 +32,6 @@ export async function POST(request: Request) {
     }
 
     // It's a human (or unknown, which we assume is human for safety)
-    const { prisma } = require('@/lib/prisma');
     if (batchId && callSid) {
       const alreadyAnswered = await prisma.callLog.findFirst({
         where: {
