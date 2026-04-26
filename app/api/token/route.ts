@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import twilio from "twilio";
 
@@ -6,7 +6,10 @@ const AccessToken = twilio.jwt.AccessToken;
 const VoiceGrant = AccessToken.VoiceGrant;
 
 // GET /api/token — generate a Twilio Access Token for browser-based calling
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const userId = request.headers.get("x-user-id") || "anonymous";
+  const agentIdentity = `ccapp-agent-${userId}`;
+
   try {
     const settings = await prisma.setting.findMany({
       where: {
@@ -43,7 +46,7 @@ export async function GET() {
 
     // Create an access token
     const token = new AccessToken(accountSid, apiKeySid, apiKeySecret, {
-      identity: "ccapp-agent",
+      identity: agentIdentity,
       ttl: 3600, // 1 hour
     });
 
@@ -57,7 +60,7 @@ export async function GET() {
 
     return NextResponse.json({
       token: token.toJwt(),
-      identity: "ccapp-agent",
+      identity: agentIdentity,
     });
   } catch (error) {
     console.error("Error generating token:", error);
