@@ -17,11 +17,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true }); // Twilio requires 200 OK
     }
 
-    // Update the CallLog for this specific call
-    await prisma.callLog.updateMany({
-      where: { callSid },
-      data: { status: callStatus, duration },
-    });
+    // Update the CallLog for this specific call, but protect 'answered-human'
+    const existingLog = await prisma.callLog.findFirst({ where: { callSid } });
+    if (existingLog && existingLog.status === 'answered-human' && callStatus === 'in-progress') {
+      await prisma.callLog.updateMany({
+        where: { callSid },
+        data: { duration }, // Only update duration, keep status
+      });
+    } else {
+      await prisma.callLog.updateMany({
+        where: { callSid },
+        data: { status: callStatus, duration },
+      });
+    }
 
     await prisma.systemLog.create({
       data: {
@@ -46,5 +54,32 @@ export async function POST(request: Request) {
       }
     }).catch(() => {});
     return NextResponse.json({ success: false }); // Always return 2xx or 500
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const batchId = url.searchParams.get('batchId');
+
+    if (!batchId) {
+      return NextResponse.json({ error: 'Missing batchId' }, { status: 400 });
+    }
+
+    const answeredCall = await prisma.callLog.findFirst({
+      where: {
+        batchId,
+        status: 'answered-human'
+      }
+    });
+
+    if (answeredCall) {
+      return NextResponse.json({ answeredCall });
+    }
+
+    return NextResponse.json({ answeredCall: null });
+  } catch (error: any) {
+    console.error('Poll batch error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

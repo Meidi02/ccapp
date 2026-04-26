@@ -112,6 +112,7 @@ export default function Dashboard() {
   const deviceRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const activeCallRef = useRef<any>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [callActive, setCallActive] = useState(false);
   const callLogIdRef = useRef<string>("");
   const callStartTimeRef = useRef<Date | null>(null);
@@ -579,6 +580,7 @@ export default function Dashboard() {
   };
 
   const handleHangUp = () => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     if (activeCallRef.current) {
       activeCallRef.current.disconnect();
     }
@@ -682,6 +684,35 @@ export default function Dashboard() {
             
             if (res.ok) {
               setActionStatus(`Parallel dialing ${data.initiatedCalls} leads. Waiting for answer...`);
+              
+              // Start polling for a connected lead
+              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = setInterval(async () => {
+                try {
+                  const pollRes = await fetch(`/api/call/parallel-status?batchId=${data.batchId}`);
+                  const pollData = await pollRes.json();
+                  if (pollData.answeredCall) {
+                    const answeredId = pollData.answeredCall.leadId;
+                    setActionStatus(`Connected to ${pollData.answeredCall.leadName}`);
+                    announce(`Connected to ${pollData.answeredCall.leadName}`);
+                    
+                    // Switch the UI to show the person that answered!
+                    setLeads(currentLeads => {
+                      const answeredLead = currentLeads.find(l => l.id === answeredId);
+                      if (answeredLead) {
+                        setSelectedLead(answeredLead);
+                        setSelectedLeadIds([answeredId]); // Make them the only selected lead
+                      }
+                      return currentLeads;
+                    });
+                    
+                    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                  }
+                } catch (err) {
+                  // ignore poll errors
+                }
+              }, 1500);
+
             } else {
               throw new Error(data.error || "Failed to initiate calls");
             }

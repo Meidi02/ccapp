@@ -27,6 +27,32 @@ export async function POST(request: Request) {
     }
 
     // It's a human (or unknown, which we assume is human for safety)
+    const { prisma } = require('@/lib/prisma');
+    if (batchId && callSid) {
+      const alreadyAnswered = await prisma.callLog.findFirst({
+        where: {
+          batchId,
+          status: 'answered-human',
+          callSid: { not: callSid }
+        }
+      });
+
+      if (alreadyAnswered) {
+        console.log(`[Outbound Answered] Lead ${leadId} answered, but batch ${batchId} already has a connected human. Hanging up to prevent double connect.`);
+        response.say('An agent was available, but another call connected first. We apologize and will call you back. Goodbye.');
+        response.hangup();
+        return new NextResponse(response.toString(), {
+          headers: { 'Content-Type': 'text/xml' },
+        });
+      }
+
+      // Mark this call as the winner
+      await prisma.callLog.updateMany({
+        where: { callSid },
+        data: { status: 'answered-human' }
+      });
+    }
+
     if (!masterSip) {
       response.say('System error. Missing SIP domain.');
     } else {
