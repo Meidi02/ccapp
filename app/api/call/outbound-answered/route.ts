@@ -39,7 +39,6 @@ export async function POST(request: Request) {
 
       if (alreadyAnswered) {
         console.log(`[Outbound Answered] Lead ${leadId} answered, but batch ${batchId} already has a connected human. Hanging up to prevent double connect.`);
-        response.say('An agent was available, but another call connected first. We apologize and will call you back. Goodbye.');
         response.hangup();
         return new NextResponse(response.toString(), {
           headers: { 'Content-Type': 'text/xml' },
