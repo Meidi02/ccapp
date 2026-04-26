@@ -31,61 +31,9 @@ export async function POST(request: Request) {
       }
     });
 
-    // If this call was answered, we need to cancel the other ringing calls in the batch
-    if (callStatus === 'answered' || callStatus === 'in-progress') {
-      console.log(`[Parallel Status] Call ${callSid} was answered. Canceling other calls in batch ${batchId}.`);
-      
-      const otherCalls = await prisma.callLog.findMany({
-        where: {
-          batchId,
-          status: 'initiated', // Only cancel calls that are still ringing/initiated
-          callSid: { not: callSid },
-        }
-      });
-
-      if (otherCalls.length > 0) {
-        // Fetch credentials to cancel calls
-        const assignedNumbers = await prisma.twilioNumber.findMany({ where: { assignedToId: childId } });
-        
-        for (const otherCall of otherCalls) {
-          // Attempt to cancel using available credentials
-          for (const numConfig of assignedNumbers) {
-            try {
-              const client = twilio(numConfig.accountSid, numConfig.authToken);
-              await client.calls(otherCall.callSid).update({ status: 'canceled' });
-              console.log(`[Parallel Status] Successfully canceled ${otherCall.callSid}`);
-              
-              // Update DB to reflect cancellation
-              await prisma.callLog.updateMany({
-                where: { callSid: otherCall.callSid },
-                data: { status: 'canceled' }
-              });
-
-              await prisma.systemLog.create({
-                data: {
-                  level: 'INFO', source: 'BACKEND',
-                  message: `Canceled ringing call ${otherCall.callSid} because batch ${batchId} was answered.`,
-                  meta: { callSid: otherCall.callSid, batchId }
-                }
-              });
-              break; // Stop trying credentials once successful
-            } catch (e: any) {
-              // Expected if the credential doesn't own this CallSid
-              if (e.status !== 404 && e.code !== 20404) {
-                console.error(`[Parallel Status] Error canceling ${otherCall.callSid}:`, e.message);
-                await prisma.systemLog.create({
-                  data: {
-                    level: 'ERROR', source: 'TWILIO',
-                    message: `Failed to cancel call ${otherCall.callSid}: ${e.message}`,
-                    meta: { error: e.message }
-                  }
-                }).catch(() => {});
-              }
-            }
-          }
-        }
-      }
-    }
+    // Note: We no longer cancel other calls here when status is 'answered' or 'in-progress'.
+    // With AMD enabled, 'answered' just means the phone was picked up (could be voicemail).
+    // Cancellation of other legs is now handled by /api/call/outbound-answered ONLY when a human is detected.
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

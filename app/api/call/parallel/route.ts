@@ -65,11 +65,14 @@ export async function POST(request: Request) {
       try {
         const useConference = numberConfig.accountSid === masterSidSetting.value;
         const call = await client.calls.create({
-          url: `${baseUrl}/api/call/outbound-answered?childId=${userId}&leadId=${lead.id}&masterSip=${masterSip}&useConference=${useConference}`,
+          url: `${baseUrl}/api/call/outbound-answered?childId=${userId}&leadId=${lead.id}&masterSip=${masterSip}&useConference=${useConference}&batchId=${batchId}`,
           to: lead.phone,
           from: numberConfig.phoneNumber,
           statusCallback: `${baseUrl}/api/call/parallel-status?batchId=${batchId}&childId=${userId}`,
           statusCallbackEvent: ['completed', 'answered', 'busy', 'no-answer', 'canceled', 'failed'],
+          machineDetection: 'Enable',
+          machineDetectionTimeout: 15,
+          asyncAmd: 'false',
         });
 
         // Log to database
