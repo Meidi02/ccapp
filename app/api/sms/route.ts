@@ -38,13 +38,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get ClickSend settings
+    // Fetch credentials
     const settings = await prisma.setting.findMany({
       where: {
         key: {
           in: [
-            "CLICKSEND_USERNAME",
-            "CLICKSEND_API_KEY",
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+            "GMAIL_SENDER_EMAIL",
+            "GMAIL_APP_PASSWORD",
+            "GMAIL_SENDER_NAME"
           ],
         },
       },
@@ -55,80 +58,117 @@ export async function POST(request: NextRequest) {
       settingsMap[s.key] = s.value;
     }
 
-    const username = settingsMap.CLICKSEND_USERNAME;
-    const apiKey = settingsMap.CLICKSEND_API_KEY;
+    const twilioSid = settingsMap.TWILIO_ACCOUNT_SID;
+    const twilioToken = settingsMap.TWILIO_AUTH_TOKEN;
+    const gmailEmail = settingsMap.GMAIL_SENDER_EMAIL;
+    const gmailAppPassword = settingsMap.GMAIL_APP_PASSWORD;
+    const gmailName = settingsMap.GMAIL_SENDER_NAME;
 
-    if (!username || !apiKey) {
+    if (!twilioSid || !twilioToken || !gmailEmail || !gmailAppPassword) {
       return NextResponse.json(
         {
           error:
-            "ClickSend credentials not configured. Go to Admin Settings to add your ClickSend Username and API Key.",
+            "Missing Twilio or Gmail credentials. Both are required for the Email-to-SMS fallback.",
         },
         { status: 400 }
       );
     }
 
-    // Prepare ClickSend payload
-    const payload = {
-      messages: [
-        {
-          to: to,
-          body: body,
-          source: "coldcall_app"
-        }
-      ]
+    const client = twilio(twilioSid, twilioToken);
+
+    // 1. Look up the carrier using Twilio
+    let carrierName = "";
+    try {
+      const lookupResult = await client.lookups.v1.phoneNumbers(to).fetch({ type: ['carrier'] });
+      carrierName = lookupResult.carrier?.name || "";
+    } catch (err: any) {
+      console.warn("Twilio Lookup Failed:", err.message);
+      return NextResponse.json({ error: "Failed to verify phone number carrier." }, { status: 400 });
+    }
+
+    if (!carrierName) {
+      return NextResponse.json({ error: "Could not determine mobile carrier for this number." }, { status: 400 });
+    }
+
+    // 2. Map carrier name to SMS gateway
+    const carrierMap: Record<string, string> = {
+      "at&t": "txt.att.net",
+      "verizon": "vtext.com",
+      "t-mobile": "tmomail.net",
+      "sprint": "messaging.sprintpcs.com",
+      "virgin mobile": "vmobl.com",
+      "us cellular": "email.uscc.net",
+      "cricket": "sms.cricketwireless.net",
+      "boost mobile": "sms.myboostmobile.com",
+      "metropcs": "mymetropcs.com",
+      "mint mobile": "tmomail.net"
     };
 
-    // Base64 encode credentials for Basic Auth
-    const authString = Buffer.from(`${username}:${apiKey}`).toString('base64');
+    let gateway = "";
+    const cName = carrierName.toLowerCase();
+    for (const [key, domain] of Object.entries(carrierMap)) {
+      if (cName.includes(key)) {
+        gateway = domain;
+        break;
+      }
+    }
 
-    // Send SMS via ClickSend
-    const clicksendRes = await fetch("https://rest.clicksend.com/v3/sms/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Basic ${authString}`
+    if (!gateway) {
+      return NextResponse.json({ error: `Unsupported carrier for Email-to-SMS: ${carrierName}` }, { status: 400 });
+    }
+
+    // 3. Format the target email address
+    // Extract the last 10 digits
+    const cleanPhone = to.replace(/\D/g, "").slice(-10);
+    if (cleanPhone.length !== 10) {
+      return NextResponse.json({ error: "Invalid US phone number format." }, { status: 400 });
+    }
+    const targetEmail = `${cleanPhone}@${gateway}`;
+
+    // 4. Send the email
+    const nodemailer = require("nodemailer");
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: gmailEmail,
+        pass: gmailAppPassword,
       },
-      body: JSON.stringify(payload)
     });
 
-    if (!clicksendRes.ok) {
-      const errorText = await clicksendRes.text();
-      throw new Error(`ClickSend API error: ${clicksendRes.status} ${errorText}`);
-    }
+    const info = await transporter.sendMail({
+      from: `"${gmailName || 'ColdCall'}" <${gmailEmail}>`,
+      to: targetEmail,
+      subject: "", // SMS messages usually omit subjects, or put them in parentheses
+      text: body,
+    });
 
-    const clicksendData = await clicksendRes.json();
-    
-    // Check if the message was accepted
-    if (clicksendData.http_code !== 200 || !clicksendData.data || !clicksendData.data.messages || clicksendData.data.messages.length === 0) {
-      throw new Error(`ClickSend delivery failed: ${JSON.stringify(clicksendData)}`);
-    }
-
-    const messageResult = clicksendData.data.messages[0];
-
-    // Log the message
+    // 5. Log the message
     const smsLog = await prisma.smsLog.create({
       data: {
         leadId: leadId || "",
         leadName: leadName || "",
         leadPhone: to,
         body,
-        status: messageResult.status || "sent",
-        twilioSid: messageResult.message_id || "", // Reusing twilioSid column to store ClickSend message_id
+        status: "sent",
+        twilioSid: info.messageId || "email-to-sms", // Store Nodemailer messageId
         direction: "outbound",
       },
     });
 
     return NextResponse.json({
       success: true,
-      messageSid: messageResult.message_id,
-      status: messageResult.status,
+      messageSid: info.messageId,
+      status: "sent",
       id: smsLog.id,
+      carrier: carrierName,
+      gateway: targetEmail
     });
   } catch (error) {
-    console.error("Error sending SMS:", error);
+    console.error("Error sending Email-to-SMS:", error);
     const msg =
-      error instanceof Error ? error.message : "Failed to send SMS";
+      error instanceof Error ? error.message : "Failed to send Email-to-SMS";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
