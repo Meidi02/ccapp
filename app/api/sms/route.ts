@@ -125,6 +125,15 @@ export async function POST(request: NextRequest) {
     }
     const targetEmail = `${cleanPhone}@${gateway}`;
 
+    // Log the intended route for debugging
+    await prisma.systemLog.create({
+      data: {
+        level: "INFO",
+        source: "EMAIL_TO_SMS",
+        message: `Attempting to send SMS to ${to}. Detected Carrier: ${carrierName}. Sending email to: ${targetEmail}`
+      }
+    });
+
     // 4. Send the email
     const nodemailer = require("nodemailer");
     const transporter = nodemailer.createTransport({
@@ -142,6 +151,15 @@ export async function POST(request: NextRequest) {
       to: targetEmail,
       subject: "", // SMS messages usually omit subjects, or put them in parentheses
       text: body,
+    });
+
+    // Log success
+    await prisma.systemLog.create({
+      data: {
+        level: "INFO",
+        source: "EMAIL_TO_SMS",
+        message: `Nodemailer successfully handed off email to SMTP server for ${targetEmail}. Message ID: ${info.messageId}`
+      }
     });
 
     // 5. Log the message
@@ -169,6 +187,16 @@ export async function POST(request: NextRequest) {
     console.error("Error sending Email-to-SMS:", error);
     const msg =
       error instanceof Error ? error.message : "Failed to send Email-to-SMS";
+    
+    // Log failure
+    await prisma.systemLog.create({
+      data: {
+        level: "ERROR",
+        source: "EMAIL_TO_SMS",
+        message: `Failed to send Email-to-SMS. Error: ${msg}`
+      }
+    }).catch(() => {});
+
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
