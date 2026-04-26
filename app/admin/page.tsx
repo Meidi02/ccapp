@@ -59,10 +59,13 @@ export default function AdminPage() {
   const [saveProfile, setSaveProfile] = useState(false);
   const [profileName, setProfileName] = useState("");
 
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [savingSettings, setSavingSettings] = useState(false);
+
   const router = useRouter();
 
   useEffect(() => {
-    Promise.all([fetchUsers(), fetchTwilioNumbers(), fetchTwilioProfiles(), fetchLogs()]).finally(() => setLoading(false));
+    Promise.all([fetchUsers(), fetchTwilioNumbers(), fetchTwilioProfiles(), fetchLogs(), fetchSettings()]).finally(() => setLoading(false));
     
     // Poll logs every 5 seconds
     const interval = setInterval(fetchLogs, 5000);
@@ -117,6 +120,35 @@ export default function AdminPage() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch("/api/settings");
+      if (res.ok) {
+        const data = await res.json();
+        setSettings(data && !data.error ? data : {});
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      if (res.ok) alert("Global Twilio settings saved!");
+      else alert("Failed to save settings");
+    } catch {
+      alert("Failed to save settings");
+    }
+    setSavingSettings(false);
   };
 
   const handleProfileSelect = (profileId: string) => {
@@ -326,6 +358,73 @@ export default function AdminPage() {
               </table>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Global Twilio Settings */}
+      <div className="bg-gray-800 rounded-lg shadow-md border border-gray-700 overflow-hidden mt-8">
+        <h2 className="text-xl font-semibold p-6 border-b border-gray-700 text-pink-400">Global Twilio Configuration</h2>
+        <div className="p-6">
+          <p className="text-sm text-gray-400 mb-6">These are the master credentials used for outbound browser dialing.</p>
+          <form onSubmit={handleSaveSettings} className="space-y-4 max-w-3xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Account SID</label>
+                <input
+                  type="text"
+                  value={settings['TWILIO_ACCOUNT_SID'] || ""}
+                  onChange={(e) => setSettings({...settings, 'TWILIO_ACCOUNT_SID': e.target.value})}
+                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                  placeholder="AC..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Auth Token</label>
+                <input
+                  type="password"
+                  value={settings['TWILIO_AUTH_TOKEN'] || ""}
+                  onChange={(e) => setSettings({...settings, 'TWILIO_AUTH_TOKEN': e.target.value})}
+                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">API Key SID</label>
+                <input
+                  type="text"
+                  value={settings['TWILIO_API_KEY_SID'] || ""}
+                  onChange={(e) => setSettings({...settings, 'TWILIO_API_KEY_SID': e.target.value})}
+                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                  placeholder="SK..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">API Key Secret</label>
+                <input
+                  type="password"
+                  value={settings['TWILIO_API_KEY_SECRET'] || ""}
+                  onChange={(e) => setSettings({...settings, 'TWILIO_API_KEY_SECRET': e.target.value})}
+                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm text-gray-400 mb-1">TwiML App SID</label>
+                <input
+                  type="text"
+                  value={settings['TWILIO_TWIML_APP_SID'] || ""}
+                  onChange={(e) => setSettings({...settings, 'TWILIO_TWIML_APP_SID': e.target.value})}
+                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                  placeholder="AP..."
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={savingSettings}
+              className="mt-4 bg-pink-600 hover:bg-pink-700 text-white font-semibold py-2 px-6 rounded transition disabled:opacity-50"
+            >
+              {savingSettings ? "Saving..." : "Save Global Settings"}
+            </button>
+          </form>
         </div>
       </div>
 
