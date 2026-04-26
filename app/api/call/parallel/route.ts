@@ -70,9 +70,6 @@ export async function POST(request: Request) {
           from: numberConfig.phoneNumber,
           statusCallback: `${baseUrl}/api/call/parallel-status?batchId=${batchId}&childId=${userId}`,
           statusCallbackEvent: ['completed', 'answered', 'busy', 'no-answer', 'canceled', 'failed'],
-          machineDetection: 'Enable',
-          machineDetectionTimeout: 15,
-          asyncAmd: 'false',
         });
 
         // Log to database

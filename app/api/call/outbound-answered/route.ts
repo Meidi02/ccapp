@@ -19,19 +19,7 @@ export async function POST(request: Request) {
 
     console.log(`[Outbound Answered] Lead ${leadId} answered by: ${answeredBy}`);
 
-    // If it's a machine, hang up this leg. Do NOT cancel the other calls in the batch.
-    if (answeredBy === 'machine_start' || answeredBy === 'machine_end_beep' || answeredBy === 'machine_end_silence' || answeredBy === 'machine_end_other') {
-      await prisma.callLog.updateMany({
-        where: { callSid },
-        data: { status: 'voicemail' }
-      });
-      response.hangup();
-      return new NextResponse(response.toString(), {
-        headers: { 'Content-Type': 'text/xml' },
-      });
-    }
-
-    // It's a human (or unknown, which we assume is human for safety)
+    // Instantly connect (treating voicemail as human)
     if (batchId && callSid) {
       const alreadyAnswered = await prisma.callLog.findFirst({
         where: {
