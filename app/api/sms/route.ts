@@ -38,14 +38,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get Twilio settings
+    // Get ClickSend settings
     const settings = await prisma.setting.findMany({
       where: {
         key: {
           in: [
-            "TWILIO_ACCOUNT_SID",
-            "TWILIO_AUTH_TOKEN",
-            "TWILIO_PHONE_NUMBER",
+            "CLICKSEND_USERNAME",
+            "CLICKSEND_API_KEY",
           ],
         },
       },
@@ -56,28 +55,56 @@ export async function POST(request: NextRequest) {
       settingsMap[s.key] = s.value;
     }
 
-    const accountSid = settingsMap.TWILIO_ACCOUNT_SID;
-    const authToken = settingsMap.TWILIO_AUTH_TOKEN;
-    const fromNumber = settingsMap.TWILIO_PHONE_NUMBER;
+    const username = settingsMap.CLICKSEND_USERNAME;
+    const apiKey = settingsMap.CLICKSEND_API_KEY;
 
-    if (!accountSid || !authToken || !fromNumber) {
+    if (!username || !apiKey) {
       return NextResponse.json(
         {
           error:
-            "Twilio credentials not configured. Go to Settings to add your Twilio Account SID, Auth Token, and Phone Number.",
+            "ClickSend credentials not configured. Go to Admin Settings to add your ClickSend Username and API Key.",
         },
         { status: 400 }
       );
     }
 
-    const client = twilio(accountSid, authToken);
+    // Prepare ClickSend payload
+    const payload = {
+      messages: [
+        {
+          to: to,
+          body: body,
+          source: "coldcall_app"
+        }
+      ]
+    };
 
-    // Send SMS
-    const message = await client.messages.create({
-      body,
-      from: fromNumber,
-      to,
+    // Base64 encode credentials for Basic Auth
+    const authString = Buffer.from(`${username}:${apiKey}`).toString('base64');
+
+    // Send SMS via ClickSend
+    const clicksendRes = await fetch("https://rest.clicksend.com/v3/sms/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${authString}`
+      },
+      body: JSON.stringify(payload)
     });
+
+    if (!clicksendRes.ok) {
+      const errorText = await clicksendRes.text();
+      throw new Error(`ClickSend API error: ${clicksendRes.status} ${errorText}`);
+    }
+
+    const clicksendData = await clicksendRes.json();
+    
+    // Check if the message was accepted
+    if (clicksendData.http_code !== 200 || !clicksendData.data || !clicksendData.data.messages || clicksendData.data.messages.length === 0) {
+      throw new Error(`ClickSend delivery failed: ${JSON.stringify(clicksendData)}`);
+    }
+
+    const messageResult = clicksendData.data.messages[0];
 
     // Log the message
     const smsLog = await prisma.smsLog.create({
@@ -86,16 +113,16 @@ export async function POST(request: NextRequest) {
         leadName: leadName || "",
         leadPhone: to,
         body,
-        status: message.status || "sent",
-        twilioSid: message.sid || "",
+        status: messageResult.status || "sent",
+        twilioSid: messageResult.message_id || "", // Reusing twilioSid column to store ClickSend message_id
         direction: "outbound",
       },
     });
 
     return NextResponse.json({
       success: true,
-      messageSid: message.sid,
-      status: message.status,
+      messageSid: messageResult.message_id,
+      status: messageResult.status,
       id: smsLog.id,
     });
   } catch (error) {

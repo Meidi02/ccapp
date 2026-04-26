@@ -428,6 +428,45 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Global ClickSend Settings */}
+      <div className="bg-gray-800 rounded-lg shadow-md border border-gray-700 overflow-hidden mt-8">
+        <h2 className="text-xl font-semibold p-6 border-b border-gray-700 text-green-400">Global ClickSend SMS Configuration</h2>
+        <div className="p-6">
+          <p className="text-sm text-gray-400 mb-6">These credentials are used for sending SMS messages without A2P 10DLC restrictions via ClickSend shared numbers.</p>
+          <form onSubmit={handleSaveSettings} className="space-y-4 max-w-3xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">ClickSend Username</label>
+                <input
+                  type="text"
+                  value={settings['CLICKSEND_USERNAME'] || ""}
+                  onChange={(e) => setSettings({...settings, 'CLICKSEND_USERNAME': e.target.value})}
+                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                  placeholder="e.g. your_username"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">ClickSend API Key</label>
+                <input
+                  type="password"
+                  value={settings['CLICKSEND_API_KEY'] || ""}
+                  onChange={(e) => setSettings({...settings, 'CLICKSEND_API_KEY': e.target.value})}
+                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white"
+                  placeholder="02B2FFAA-..."
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={savingSettings}
+              className="mt-4 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded transition disabled:opacity-50"
+            >
+              {savingSettings ? "Saving..." : "Save Global Settings"}
+            </button>
+          </form>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
         <div className="md:col-span-1">
           <div className="bg-gray-800 p-6 rounded-lg shadow-md border border-gray-700">
