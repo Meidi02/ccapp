@@ -20,6 +20,11 @@ export async function POST(request: Request) {
 
     // If it's a machine, hang up this leg. Do NOT cancel the other calls in the batch.
     if (answeredBy === 'machine_start' || answeredBy === 'machine_end_beep' || answeredBy === 'machine_end_silence' || answeredBy === 'machine_end_other') {
+      const { prisma } = require('@/lib/prisma');
+      await prisma.callLog.updateMany({
+        where: { callSid },
+        data: { status: 'voicemail' }
+      });
       response.hangup();
       return new NextResponse(response.toString(), {
         headers: { 'Content-Type': 'text/xml' },

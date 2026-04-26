@@ -83,6 +83,7 @@ export default function Dashboard() {
   const [dialerNumber, setDialerNumber] = useState("");
   const [showDialer, setShowDialer] = useState(false);
   const [lastDtmfDigit, setLastDtmfDigit] = useState("");
+  const [batchStatuses, setBatchStatuses] = useState<Record<string, string>>({});
 
   // Incoming call state
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -685,28 +686,58 @@ export default function Dashboard() {
             if (res.ok) {
               setActionStatus(`Parallel dialing ${data.initiatedCalls} leads. Waiting for answer...`);
               
-              // Start polling for a connected lead
+              // Clear statuses from previous calls
+              setBatchStatuses({});
+              
+              // Start polling for connected leads and general batch status
               if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
               pollIntervalRef.current = setInterval(async () => {
                 try {
                   const pollRes = await fetch(`/api/call/parallel-status?batchId=${data.batchId}`);
                   const pollData = await pollRes.json();
-                  if (pollData.answeredCall) {
-                    const answeredId = pollData.answeredCall.leadId;
-                    setActionStatus(`Connected to ${pollData.answeredCall.leadName}`);
-                    announce(`Connected to ${pollData.answeredCall.leadName}`);
-                    
-                    // Switch the UI to show the person that answered!
-                    setLeads(currentLeads => {
-                      const answeredLead = currentLeads.find(l => l.id === answeredId);
-                      if (answeredLead) {
-                        setSelectedLead(answeredLead);
-                        setSelectedLeadIds([answeredId]); // Make them the only selected lead
+                  
+                  if (pollData.allCalls) {
+                    const newStatuses: Record<string, string> = {};
+                    let allTerminal = true;
+                    let humanAnswered = false;
+
+                    pollData.allCalls.forEach((call: any) => {
+                      newStatuses[call.leadId] = call.status;
+                      
+                      // Check if call is still in progress (ringing or waiting for AMD)
+                      if (call.status === 'initiated' || call.status === 'ringing' || call.status === 'in-progress' || call.status === 'queued') {
+                        allTerminal = false;
                       }
-                      return currentLeads;
+                      
+                      if (call.status === 'answered-human') {
+                        humanAnswered = true;
+                      }
                     });
                     
-                    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                    setBatchStatuses(newStatuses);
+
+                    if (pollData.answeredCall) {
+                      const answeredId = pollData.answeredCall.leadId;
+                      setActionStatus(`Connected to ${pollData.answeredCall.leadName}`);
+                      announce(`Connected to ${pollData.answeredCall.leadName}`);
+                      
+                      // Switch the UI to show the person that answered!
+                      setLeads(currentLeads => {
+                        const answeredLead = currentLeads.find(l => l.id === answeredId);
+                        if (answeredLead) {
+                          setSelectedLead(answeredLead);
+                          setSelectedLeadIds([answeredId]); // Make them the only selected lead
+                        }
+                        return currentLeads;
+                      });
+                      
+                      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                    } else if (allTerminal && !humanAnswered && pollData.allCalls.length > 0) {
+                      // All calls reached a terminal state (voicemail, hungup, failed, canceled) and no human answered
+                      setActionStatus("All calls failed or went to voicemail.");
+                      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                      handleHangUp();
+                    }
                   }
                 } catch (err) {
                   // ignore poll errors
@@ -1621,7 +1652,65 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Lead header */}
+            {/* Lead header or Parallel Dialing Grid */}
+            {selectedLeadIds.length > 1 && calling ? (
+              <div style={{ marginBottom: "16px" }}>
+                <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "12px" }}>
+                  Parallel Dialing {selectedLeadIds.length} Leads
+                </h2>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  {selectedLeadIds.map(id => {
+                    const lead = filteredLeads.find(l => l.id === id);
+                    if (!lead) return null;
+                    const status = batchStatuses[id] || 'initiated';
+                    
+                    let statusColor = "var(--color-text-muted)";
+                    let statusBg = "var(--color-bg-tertiary)";
+                    let displayStatus = "Ringing...";
+                    
+                    if (status === 'voicemail') {
+                      statusColor = "#e67e22";
+                      statusBg = "rgba(230, 126, 34, 0.15)";
+                      displayStatus = "Voicemail";
+                    } else if (status === 'completed' || status === 'failed' || status === 'busy' || status === 'no-answer') {
+                      statusColor = "#e74c3c";
+                      statusBg = "rgba(231, 76, 60, 0.15)";
+                      displayStatus = "Hung Up";
+                    } else if (status === 'canceled') {
+                      statusColor = "#95a5a6";
+                      statusBg = "rgba(149, 165, 166, 0.15)";
+                      displayStatus = "Canceled";
+                    } else if (status === 'answered-human') {
+                      statusColor = "#2ecc71";
+                      statusBg = "rgba(46, 204, 113, 0.15)";
+                      displayStatus = "Connected!";
+                    }
+
+                    return (
+                      <div key={`pdbox-${id}`} className="card" style={{ padding: "12px", border: `1px solid ${statusColor}` }}>
+                        <h3 style={{ fontSize: "1rem", margin: "0 0 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {lead.firstName} {lead.lastName}
+                        </h3>
+                        {lead.company && <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lead.company}</div>}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "0.8125rem", fontFamily: "monospace" }}>{lead.phone}</span>
+                          <span style={{ 
+                            fontSize: "0.75rem", 
+                            fontWeight: 700, 
+                            padding: "2px 6px", 
+                            borderRadius: "4px",
+                            backgroundColor: statusBg,
+                            color: statusColor
+                          }}>
+                            {displayStatus}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
             <div className="card" style={{ marginBottom: "16px" }}>
               <h2
                 style={{
@@ -1702,6 +1791,7 @@ export default function Dashboard() {
                 )}
               </dl>
             </div>
+            )}
 
             {/* Action buttons */}
             <div
