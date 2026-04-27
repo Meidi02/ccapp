@@ -1766,6 +1766,17 @@ export default function Dashboard() {
                     <dd style={{ margin: 0 }}>{selectedLead.email}</dd>
                   </>
                 )}
+                {(selectedLead as any).timezone && (
+                  <>
+                    <dt style={{ fontWeight: 600, color: "var(--color-text-muted)" }}>Local Time</dt>
+                    <dd style={{ margin: 0 }}>
+                      <span className="font-semibold text-green-400">
+                        {new Date().toLocaleTimeString('en-US', { timeZone: (selectedLead as any).timezone, hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                      <span className="text-xs text-gray-500 ml-2">({(selectedLead as any).timezone.split('/')[1]?.replace('_', ' ') || (selectedLead as any).timezone})</span>
+                    </dd>
+                  </>
+                )}
                 {(selectedLead.city || selectedLead.state) && (
                   <>
                     <dt style={{ fontWeight: 600, color: "var(--color-text-muted)" }}>Location</dt>

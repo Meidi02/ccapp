@@ -26,6 +26,7 @@
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
     "twilio": "^5.13.0",
+    "zipcode-to-timezone": "^0.0.9",
     "zod": "^4.3.6"
   },
   "devDependencies": {

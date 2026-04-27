@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import Papa from "papaparse";
+import { inferTimezone } from "@/lib/timezone";
 
 // POST /api/import — import leads from CSV
 export async function POST(request: NextRequest) {
@@ -139,6 +140,7 @@ export async function POST(request: NextRequest) {
         state: l.state || "",
         website: l.website || "",
         googleUrl: l.googleUrl || "",
+        timezone: inferTimezone(l.city || "", l.phone || ""),
         notes: l.notes || "",
         disposition: l.disposition || "NEW",
         projectId: projectId || null,

@@ -38,6 +38,7 @@ model Lead {
   state       String   @default("")
   website     String   @default("")
   googleUrl   String   @default("")
+  timezone    String   @default("")
   notes       String   @default("")
   disposition String   @default("NEW")
   callbackDate String  @default("")
